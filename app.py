@@ -40,7 +40,10 @@ def after_request(response):
 @login_required
 def index():
     """Show portfolio of stocks"""
-    return apology("TODO")
+    print(session["user_id"])
+    
+
+    return render_template('index.html')
 
 
 @app.route("/buy", methods=["GET", "POST"])
@@ -90,8 +93,7 @@ def login():
 
     # User reached route via GET (as by clicking a link or via redirect)
     else:
-        return render_template("login.html")
-
+        return render_template("login.html")    
 
 @app.route("/logout")
 def logout():
@@ -114,7 +116,31 @@ def quote():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     """Register user"""
-    return apology("TODO")
+    
+    session.clear()
+
+    if request.method == "POST":
+
+        if not request.form.get("username"):
+            return apology("missing username",400)
+        
+        elif len(db.execute("SELECT * FROM users WHERE username = ?",request.form.get("username")))== 1:
+            return apology("username is not available",400)
+
+        elif not request.form.get("password"):
+            return apology("missing password",400)
+        
+        elif request.form.get("confirmation") != request.form.get("password"):
+            return apology("password don't match",400)
+        
+        db.execute("INSERT INTO users (username, hash) VALUES (?, ?)",request.form.get('username'),generate_password_hash(request.form.get("password")))
+
+        session["user_id"] = db.execute("SELECT id FROM users WHERE username = ?",request.form.get("username"))[0]["id"]
+
+        return redirect("/")
+        
+    elif request.method == "GET":
+        return render_template("register.html")
 
 
 @app.route("/sell", methods=["GET", "POST"])
