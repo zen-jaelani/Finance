@@ -41,16 +41,88 @@ def after_request(response):
 def index():
     """Show portfolio of stocks"""
     print(session["user_id"])
-    
 
-    return render_template('index.html')
+    return render_template("index.html")
 
 
 @app.route("/buy", methods=["GET", "POST"])
 @login_required
 def buy():
     """Buy shares of stock"""
-    return apology("TODO")
+
+    if request.method == "POST":
+        symbol = request.form.get("symbol")
+        amount = request.form.get("shares")
+
+        if not symbol:
+            return apology("missing symbol")
+        if not amount or not amount.isdigit() or int(amount) < 1:
+            return apology("invalid shares")
+
+        amount = int(amount)
+        quote = lookup(symbol)
+
+        if not quote:
+            return apology("invalid symbol")
+
+        price = quote["price"] * amount
+        uid = session["user_id"]
+        cash = db.execute("SELECT cash FROM users WHERE id = ?", uid)[0]["cash"]
+
+        if price > cash:
+            return apology("can't afford")
+
+        db.execute("BEGIN TRANSACTION;")
+
+        portfolio_id = db.execute(
+            """
+        SELECT id FROM portfolio
+        WHERE user_id = ? AND symbol = ?;
+        """,
+            uid,
+            symbol,
+        )
+
+        if portfolio_id:
+            portfolio_id = portfolio_id[0]["id"]
+            db.execute(
+                """
+                UPDATE portfolio
+                SET shares = shares + ?
+                WHERE user_id = ? AND symbol = ?;
+                """,
+                amount,
+                uid,
+                symbol,
+            )
+
+        else:
+            portfolio_id = db.execute(
+                "INSERT INTO portfolio (user_id, symbol, shares) VALUES (?, ?, ?);",
+                uid,
+                symbol,
+                amount,
+            )
+
+        db.execute(
+            """
+            INSERT INTO history (user_id, portfolio_id, symbol, shares)
+            VALUES (?, ?, ?, ?);
+            """,
+            uid,
+            portfolio_id,
+            symbol,
+            amount,
+        )
+
+        db.execute("UPDATE users SET cash = cash - ? WHERE id = ?;", price, uid)
+
+        db.execute("COMMIT;")
+
+        redirect("/")
+
+    elif request.method == "GET":
+        return render_template("buy.html")
 
 
 @app.route("/history")
@@ -69,7 +141,6 @@ def login():
 
     # User reached route via POST (as by submitting a form via POST)
     if request.method == "POST":
-
         # Ensure username was submitted
         if not request.form.get("username"):
             return apology("must provide username", 403)
@@ -79,10 +150,14 @@ def login():
             return apology("must provide password", 403)
 
         # Query database for username
-        rows = db.execute("SELECT * FROM users WHERE username = ?", request.form.get("username"))
+        rows = db.execute(
+            "SELECT * FROM users WHERE username = ?", request.form.get("username")
+        )
 
         # Ensure username exists and password is correct
-        if len(rows) != 1 or not check_password_hash(rows[0]["hash"], request.form.get("password")):
+        if len(rows) != 1 or not check_password_hash(
+            rows[0]["hash"], request.form.get("password")
+        ):
             return apology("invalid username and/or password", 403)
 
         # Remember which user has logged in
@@ -93,7 +168,8 @@ def login():
 
     # User reached route via GET (as by clicking a link or via redirect)
     else:
-        return render_template("login.html")    
+        return render_template("login.html")
+
 
 @app.route("/logout")
 def logout():
@@ -112,14 +188,14 @@ def quote():
     """Get stock quote."""
 
     if request.method == "POST":
-        
         if not request.form.get("symbol"):
             return apology("missing symbol")
-        
+
         res = lookup(request.form.get("symbol"))
 
         if res:
-            return render_template("quote-success.html",data = res)
+            return render_template("quote-success.html", data=res)
+
         else:
             return apology("invalid symbol")
 
@@ -130,29 +206,42 @@ def quote():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     """Register user"""
-    
+
     session.clear()
 
     if request.method == "POST":
-
         if not request.form.get("username"):
-            return apology("missing username",400)
-        
-        elif len(db.execute("SELECT * FROM users WHERE username = ?",request.form.get("username")))== 1:
-            return apology("username is not available",400)
+            return apology("missing username", 400)
+
+        elif (
+            len(
+                db.execute(
+                    "SELECT * FROM users WHERE username = ?",
+                    request.form.get("username"),
+                )
+            )
+            == 1
+        ):
+            return apology("username is not available", 400)
 
         elif not request.form.get("password"):
-            return apology("missing password",400)
-        
-        elif request.form.get("confirmation") != request.form.get("password"):
-            return apology("password don't match",400)
-        
-        db.execute("INSERT INTO users (username, hash) VALUES (?, ?)",request.form.get('username'),generate_password_hash(request.form.get("password")))
+            return apology("missing password", 400)
 
-        session["user_id"] = db.execute("SELECT id FROM users WHERE username = ?",request.form.get("username"))[0]["id"]
+        elif request.form.get("confirmation") != request.form.get("password"):
+            return apology("password don't match", 400)
+
+        db.execute(
+            "INSERT INTO users (username, hash) VALUES (?, ?)",
+            request.form.get("username"),
+            generate_password_hash(request.form.get("password")),
+        )
+
+        session["user_id"] = db.execute(
+            "SELECT id FROM users WHERE username = ?", request.form.get("username")
+        )[0]["id"]
 
         return redirect("/")
-        
+
     elif request.method == "GET":
         return render_template("register.html")
 
