@@ -324,3 +324,20 @@ def sell():
     elif request.method == "GET":
         
         return render_template("sell.html",shares=data)
+
+@app.route("/topup",methods=["GET","POST"])
+@login_required
+def topup():
+    """Add more cash"""
+
+    if request.method == "POST":
+
+        if not request.form.get("cash") or not request.form.get("cash").isdigit() or int(request.form.get("cash")) < 1:
+            return apology("Invalid amount")
+
+        db.execute("UPDATE users SET cash = cash + ? WHERE id = ?;",int(request.form.get("cash")),session["user_id"])
+
+        return redirect("/")
+
+    elif request.method == "GET":
+        return render_template("topup.html")
