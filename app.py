@@ -44,7 +44,7 @@ def index():
     data = db.execute("SELECT cash FROM users WHERE id = ?",session["user_id"])[0]
     data["portfolio"] = db.execute("SELECT symbol,shares FROM portfolio WHERE user_id = ?",session["user_id"])
     data["total"] = data["cash"]
-    
+
     for v in data["portfolio"]:
         res = lookup(v["symbol"])
         v["price"] = res["price"]
@@ -265,4 +265,51 @@ def register():
 @login_required
 def sell():
     """Sell shares of stock"""
-    return apology("TODO")
+
+    data = db.execute("SELECT symbol,shares,id FROM portfolio WHERE user_id = ? AND shares > 0",session["user_id"])
+    if request.method == "POST":
+        
+        req = None
+        for v in data:
+            if v["symbol"] == request.form.get("symbol"):
+                req = v
+        
+        if not req :
+            return apology("invalid symbol")
+        
+
+        if not request.form.get("shares") or not request.form.get("shares").isdigit() or int(request.form.get("shares")) < 1 or int(request.form.get("shares")) > req["shares"] :
+            return apology("invalid shares")
+        
+
+        db.execute("BEGIN TRANSACTION;")
+
+        db.execute(
+                """
+                UPDATE portfolio
+                SET shares = shares - ?
+                WHERE user_id = ? AND symbol = ?;
+                """,
+                request.form.get("shares"),session["user_id"],request.form.get("symbol")
+            )
+
+        db.execute(
+            """
+            INSERT INTO history (user_id, portfolio_id, symbol, shares)
+            VALUES (?, ?, ?, ?);
+            """,
+            session["user_id"],
+            req["id"],
+            request.form.get("symbol"),
+            int(request.form.get("shares")) * -1,
+        )
+
+        db.execute("UPDATE users SET cash = cash + ? WHERE id = ?;", int(request.form.get("shares")) * lookup(request.form.get("symbol"))["price"], session["user_id"])
+
+        db.execute("COMMIT;")
+        
+        return redirect("/")
+
+    elif request.method == "GET":
+        
+        return render_template("sell.html",shares=data)
