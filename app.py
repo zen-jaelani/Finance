@@ -121,13 +121,14 @@ def buy():
 
         db.execute(
             """
-            INSERT INTO history (user_id, portfolio_id, symbol, shares)
-            VALUES (?, ?, ?, ?);
+            INSERT INTO history (user_id, portfolio_id, symbol, shares,price)
+            VALUES (?, ?, ?, ?,?);
             """,
             uid,
             portfolio_id,
             symbol,
             amount,
+            quote["price"]
         )
 
         db.execute("UPDATE users SET cash = cash - ? WHERE id = ?;", price, uid)
@@ -145,7 +146,7 @@ def buy():
 def history():
     """Show history of transactions"""
     
-    data = db.execute("SELECT * FROM history WHERE user_id = ?",session["user_id"])
+    data = db.execute("SELECT * FROM history WHERE user_id = ? ORDER BY date DESC",session["user_id"])
     for v in data:
         v["price"] = usd(v["price"])
     print(data)
@@ -299,19 +300,22 @@ def sell():
                 """,
                 request.form.get("shares"),session["user_id"],request.form.get("symbol")
             )
+        
+        price = lookup(request.form.get("symbol"))["price"]
 
         db.execute(
             """
-            INSERT INTO history (user_id, portfolio_id, symbol, shares)
-            VALUES (?, ?, ?, ?);
+            INSERT INTO history (user_id, portfolio_id, symbol, shares, price)
+            VALUES (?, ?, ?, ?, ?);
             """,
             session["user_id"],
             req["id"],
             request.form.get("symbol"),
             int(request.form.get("shares")) * -1,
+            price
         )
 
-        db.execute("UPDATE users SET cash = cash + ? WHERE id = ?;", int(request.form.get("shares")) * lookup(request.form.get("symbol"))["price"], session["user_id"])
+        db.execute("UPDATE users SET cash = cash + ? WHERE id = ?;", int(request.form.get("shares")) * price, session["user_id"])
 
         db.execute("COMMIT;")
         
