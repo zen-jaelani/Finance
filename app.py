@@ -40,9 +40,24 @@ def after_request(response):
 @login_required
 def index():
     """Show portfolio of stocks"""
-    print(session["user_id"])
 
-    return render_template("index.html")
+    data = db.execute("SELECT cash FROM users WHERE id = ?",session["user_id"])[0]
+    data["portfolio"] = db.execute("SELECT symbol,shares FROM portfolio WHERE user_id = ?",session["user_id"])
+    data["total"] = data["cash"]
+    
+    for v in data["portfolio"]:
+        res = lookup(v["symbol"])
+        v["price"] = res["price"]
+        v["name"] = res["name"]
+        v["total"] = res["price"] * v["shares"]
+        data["total"] = data["total"] + v["total"]
+        v["total"] = usd(v['total'])
+        v["price"] = usd(v["price"])
+
+    data["total"] = usd(data["total"])
+    data["cash"] = usd(data["cash"])
+
+    return render_template("index.html",data=data)
 
 
 @app.route("/buy", methods=["GET", "POST"])
@@ -119,7 +134,7 @@ def buy():
 
         db.execute("COMMIT;")
 
-        redirect("/")
+        return redirect("/")
 
     elif request.method == "GET":
         return render_template("buy.html")
